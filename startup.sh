@@ -20,10 +20,10 @@ if [ -z "$VIRTUAL_ENV" ]; then
 fi
 
 # Global variables
-WORKSPACE="/workspace"
+WORKSPACE="/workflow"
 PROVISIONING_DIR="/provisioning"
 LOG_FILE="$PROVISIONING_DIR/logs.txt"
-APP_SCRIPT="$WORKSPACE/web-server.py"
+APP_SCRIPT="$WORKSPACE/init.py"
 REQUIREMENTS_FILE="$WORKSPACE/requirements.txt"
 INSTALLED_REQUIREMENTS_FILE="$PROVISIONING_DIR/requirements_installed.txt"
 APP_PID=""
