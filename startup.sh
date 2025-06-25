@@ -14,10 +14,12 @@ if [ -z "$WORKFLOW_GIT_URL" ]; then
     exit 1
 fi
 
-if [ -z "$VIRTUAL_ENV" ]; then
-    echo -e "${RED}Error: VIRTUAL_ENV environment variable is not set${NC}"
-    exit 1
-fi
+# Wait for VIRTUAL_ENV to be set
+while [ -z "$VIRTUAL_ENV" ]; do
+    echo -e "${YELLOW}Warning: VIRTUAL_ENV environment variable is not set, waiting...${NC}"
+    sleep 5
+done
+echo -e "${GREEN}VIRTUAL_ENV found: $VIRTUAL_ENV${NC}"
 
 # Global variables
 WORKSPACE="/workflow"
