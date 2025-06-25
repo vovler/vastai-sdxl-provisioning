@@ -2,21 +2,19 @@
 
 # Append the code to /root/onstart.sh
 cat >> /root/onstart.sh << 'EOF'
-touch ~/.no_auto_tmux;
-mkdir -p /provisioning
 cd /provisioning
-[ ! -f provisioning.sh ] && curl -O https://raw.githubusercontent.com/vovler/vastai-provisioning/refs/heads/main/provisioning.sh && chmod +x provisioning.sh
-
-[ ! -f monitoring.sh ] && curl -O https://raw.githubusercontent.com/vovler/vastai-provisioning/refs/heads/main/monitoring.sh && chmod +x monitoring.sh
-
-while true; do ./provisioning.sh; sleep 1; done &
+while true; do ./startup.sh; sleep 1; done &
 EOF
 
+# Execute the provisioning setup immediately
 touch ~/.no_auto_tmux;
 mkdir -p /provisioning
 cd /provisioning
-[ ! -f provisioning.sh ] && curl -O https://raw.githubusercontent.com/vovler/vastai-provisioning/refs/heads/main/provisioning.sh && chmod +x provisioning.sh
+[ ! -f startup.sh ] && curl -O https://raw.githubusercontent.com/vovler/vastai-sdxl-provisioning/refs/heads/main/startup.sh && chmod +x startup.sh
 
-[ ! -f monitoring.sh ] && curl -O https://raw.githubusercontent.com/vovler/vastai-provisioning/refs/heads/main/monitoring.sh && chmod +x monitoring.sh
+[ ! -f monitoring.sh ] && curl -O https://raw.githubusercontent.com/vovler/vastai-sdxl-provisioning/refs/heads/main/monitoring.sh && chmod +x monitoring.sh
 
-while true; do ./provisioning.sh; sleep 1; done &
+# Create symlink to monitoring.sh so it can be called as 'monitor' from anywhere
+[ -f /provisioning/monitoring.sh ] && ln -sf /provisioning/monitoring.sh /usr/local/bin/monitor
+
+while true; do ./startup.sh; sleep 1; done &
