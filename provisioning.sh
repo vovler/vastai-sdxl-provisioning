@@ -17,4 +17,5 @@ cd /provisioning
 # Create symlink to monitoring.sh so it can be called as 'monitor' from anywhere
 [ -f /provisioning/monitoring.sh ] && ln -sf /provisioning/monitoring.sh /usr/local/bin/monitor
 
+# Run startup.sh in a while loop in background, then exit
 while true; do ./startup.sh; sleep 1; done &
