@@ -3,7 +3,8 @@
 # Append the code to /root/onstart.sh
 cat >> /root/onstart.sh << 'EOF'
 cd /provisioning
-while true; do ./startup.sh; sleep 1; done &
+nohup bash -c 'while true; do ./startup.sh; sleep 1; done' > /dev/null 2>&1 &
+disown
 EOF
 
 # Execute the provisioning setup immediately
@@ -18,4 +19,5 @@ cd /provisioning
 [ -f /provisioning/monitoring.sh ] && ln -sf /provisioning/monitoring.sh /usr/local/bin/monitor
 
 # Run startup.sh in a while loop in background, then exit
-while true; do ./startup.sh; sleep 1; done &
+nohup bash -c 'while true; do ./startup.sh; sleep 1; done' > /dev/null 2>&1 &
+disown
