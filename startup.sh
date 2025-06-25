@@ -14,12 +14,32 @@ if [ -z "$WORKFLOW_GIT_URL" ]; then
     exit 1
 fi
 
-# Wait for VIRTUAL_ENV to be set
-while [ -z "$VIRTUAL_ENV" ]; do
-    echo -e "${YELLOW}Warning: VIRTUAL_ENV environment variable is not set, waiting...${NC}"
-    sleep 5
-done
-echo -e "${GREEN}VIRTUAL_ENV found: $VIRTUAL_ENV${NC}"
+# Set virtual environment path and activate if needed
+EXPECTED_VENV="/venv/main"
+
+# Check if we're already in the correct virtual environment
+if [ "$VIRTUAL_ENV" != "$EXPECTED_VENV" ]; then
+    echo -e "${YELLOW}Not in virtual environment, activating $EXPECTED_VENV...${NC}"
+    
+    # Check if virtual environment exists
+    if [ ! -f "$EXPECTED_VENV/bin/activate" ]; then
+        echo -e "${RED}Error: Virtual environment not found at $EXPECTED_VENV${NC}"
+        exit 1
+    fi
+    
+    # Activate virtual environment
+    source "$EXPECTED_VENV/bin/activate"
+    
+    # Verify activation
+    if [ "$VIRTUAL_ENV" != "$EXPECTED_VENV" ]; then
+        echo -e "${RED}Error: Failed to activate virtual environment${NC}"
+        exit 1
+    fi
+    
+    echo -e "${GREEN}Virtual environment activated: $VIRTUAL_ENV${NC}"
+else
+    echo -e "${GREEN}Already in correct virtual environment: $VIRTUAL_ENV${NC}"
+fi
 
 # Global variables
 WORKSPACE="/workflow"
