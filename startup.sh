@@ -189,7 +189,7 @@ start_app() {
         return 1
     fi
     
-    log "Starting web-server.py..."
+    log "Starting init.py..."
     cd "$WORKSPACE"
     
     # Log separator for python application output
