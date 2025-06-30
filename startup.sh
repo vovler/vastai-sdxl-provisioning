@@ -8,94 +8,54 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# --- Environment Setup ---
-# This section has been refactored to handle both Conda and venv
-
-# Environment type will be 'conda' or 'venv'
-ENV_TYPE=""
-# Path to the python executable for the active environment
-PYTHON_CMD=""
-# Path to the pip executable for the active environment
-PIP_CMD=""
-
-# Conda-specific settings
-CONDA_ENV_NAME="workflow_env"
-
-# venv-specific settings
-EXPECTED_VENV="/venv/main"
-
-# Function to set up the Python environment (Conda or venv)
-setup_environment() {
-    # Check for Conda first
-    if command -v conda &>/dev/null; then
-        ENV_TYPE="conda"
-        echo -e "${GREEN}Conda detected. Setting up Conda environment...${NC}"
-        
-        # Initialize Conda for the current shell session
-        # This is required to use 'conda activate' or 'conda run' in a script
-        local CONDA_BASE_PATH
-        CONDA_BASE_PATH=$(conda info --base)
-        # shellcheck source=/dev/null
-        source "${CONDA_BASE_PATH}/etc/profile.d/conda.sh"
-
-        # Check if the environment already exists
-        if ! conda env list | grep -q "^${CONDA_ENV_NAME}\s"; then
-            echo -e "${YELLOW}Conda environment '${CONDA_ENV_NAME}' not found. Creating it...${NC}"
-            # Create a new environment, choose a default python version
-            conda create -n "$CONDA_ENV_NAME" python=3.9 -y >> "$LOG_FILE" 2>&1
-            echo -e "${GREEN}Conda environment '${CONDA_ENV_NAME}' created successfully.${NC}"
-        else
-            echo -e "${GREEN}Using existing Conda environment: '${CONDA_ENV_NAME}'${NC}"
-        fi
-        
-        # Set the commands to be executed via 'conda run'
-        PYTHON_CMD="conda run -n ${CONDA_ENV_NAME} python"
-        PIP_CMD="conda run -n ${CONDA_ENV_NAME} pip"
-
-    # Fallback to venv if Conda is not found
-    else
-        ENV_TYPE="venv"
-        echo -e "${GREEN}Conda not found. Falling back to Python venv...${NC}"
-
-        # Check if the virtual environment directory exists, create if not
-        if [ ! -f "$EXPECTED_VENV/bin/activate" ]; then
-            echo -e "${YELLOW}Virtual environment not found at $EXPECTED_VENV. Creating it...${NC}"
-            # Using python3 to create the venv
-            python3 -m venv "$EXPECTED_VENV"
-            echo -e "${GREEN}Virtual environment created successfully.${NC}"
-        fi
-        
-        # Activate the virtual environment
-        echo -e "${YELLOW}Activating virtual environment: $EXPECTED_VENV...${NC}"
-        # shellcheck source=/dev/null
-        source "$EXPECTED_VENV/bin/activate"
-
-        # Verify activation
-        if [ "$VIRTUAL_ENV" != "$EXPECTED_VENV" ]; then
-            echo -e "${RED}Error: Failed to activate virtual environment${NC}"
-            exit 1
-        fi
-        
-        echo -e "${GREEN}Virtual environment activated: $VIRTUAL_ENV${NC}"
-        
-        # Set the commands to point to the venv executables
-        PYTHON_CMD="$VIRTUAL_ENV/bin/python"
-        PIP_CMD="$VIRTUAL_ENV/bin/pip"
-    fi
-    
-    if [ -z "$PYTHON_CMD" ] || [ -z "$PIP_CMD" ]; then
-        echo -e "${RED}Error: Python and Pip commands could not be set.${NC}"
-        exit 1
-    fi
-}
-
-# --- End of Environment Setup ---
-
 # Validate environment variables
 if [ -z "$WORKFLOW_GIT_URL" ]; then
     echo -e "${RED}Error: WORKFLOW_GIT_URL environment variable is not set${NC}"
     exit 1
 fi
+
+### MODIFIED SECTION - START ###
+
+# Set Conda environment path and activate if needed
+EXPECTED_CONDA_ENV_PATH="/venv/main"
+# Common base path for Conda installations in Docker images
+CONDA_BASE_PATH="/opt/conda" 
+
+# Check if we're already in the correct Conda environment
+if [ "$CONDA_PREFIX" != "$EXPECTED_CONDA_ENV_PATH" ]; then
+    echo -e "${YELLOW}Not in correct Conda environment, activating $EXPECTED_CONDA_ENV_PATH...${NC}"
+
+    # Check if the Conda environment directory exists
+    if [ ! -d "$EXPECTED_CONDA_ENV_PATH" ]; then
+        echo -e "${RED}Error: Conda environment not found at $EXPECTED_CONDA_ENV_PATH${NC}"
+        exit 1
+    fi
+    
+    # Source the conda.sh script to enable the 'conda' command
+    if [ -f "$CONDA_BASE_PATH/etc/profile.d/conda.sh" ]; then
+        # shellcheck disable=SC1091
+        source "$CONDA_BASE_PATH/etc/profile.d/conda.sh"
+    else
+        echo -e "${RED}Error: conda.sh not found at $CONDA_BASE_PATH/etc/profile.d/conda.sh. Cannot activate environment.${NC}"
+        exit 1
+    fi
+    
+    # Activate Conda environment
+    conda activate "$EXPECTED_CONDA_ENV_PATH"
+    
+    # Verify activation
+    if [ "$CONDA_PREFIX" != "$EXPECTED_CONDA_ENV_PATH" ]; then
+        echo -e "${RED}Error: Failed to activate Conda environment. CONDA_PREFIX is '$CONDA_PREFIX'${NC}"
+        exit 1
+    fi
+    
+    echo -e "${GREEN}Conda environment activated: $CONDA_PREFIX${NC}"
+else
+    echo -e "${GREEN}Already in correct Conda environment: $CONDA_PREFIX${NC}"
+fi
+
+### MODIFIED SECTION - END ###
+
 
 # Global variables
 WORKSPACE="/workflow"
@@ -205,9 +165,8 @@ install_requirements() {
         temp_req_file=$(mktemp)
         echo "$new_requirements" > "$temp_req_file"
         
-        # Install new requirements using the correct pip command
-        # The space after $PIP_CMD is important for shell parsing
-        if ${PIP_CMD} install -r "$temp_req_file" >> "$LOG_FILE" 2>&1; then
+        # ### MODIFIED ### Use 'pip' directly from the activated Conda environment
+        if pip install -r "$temp_req_file" >> "$LOG_FILE" 2>&1; then
             # Update installed requirements file only if installation succeeds
             cp "$REQUIREMENTS_FILE" "$INSTALLED_REQUIREMENTS_FILE"
             log "Requirements installation completed successfully"
@@ -230,15 +189,14 @@ start_app() {
         return 1
     fi
     
-    log "Starting web-server.py using ${ENV_TYPE}..."
+    log "Starting web-server.py..."
     cd "$WORKSPACE"
     
     # Log separator for python application output
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] === Python Application Output ===" >> "$LOG_FILE"
     
-    # Start application in background using the correct python command
-    # The space after $PYTHON_CMD is important for shell parsing
-    ${PYTHON_CMD} "$APP_SCRIPT" >> "$LOG_FILE" 2>&1 &
+    # ### MODIFIED ### Use 'python' directly from the activated Conda environment
+    python "$APP_SCRIPT" >> "$LOG_FILE" 2>&1 &
     APP_PID=$!
     
     # Give it a moment to start and check if it's still running
@@ -352,12 +310,10 @@ restart_app() {
 
 # Main execution function
 main() {
-    # Set up the environment first, so logging is available
-    setup_environment
-
+    # ### MODIFIED ### Updated log message for clarity
     log "Starting deployment script..."
-    log "Using environment manager: ${ENV_TYPE}"
     log "Repository: $WORKFLOW_GIT_URL"
+    log "Conda environment: $EXPECTED_CONDA_ENV_PATH"
     log "Workspace: $WORKSPACE"
     log "Provisioning directory: $PROVISIONING_DIR"
     log "Log file: $LOG_FILE"
