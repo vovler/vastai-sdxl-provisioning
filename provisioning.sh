@@ -15,7 +15,7 @@ if ! grep -q "# --- Custom vast.ai configuration ---" ~/.bashrc; then
 alias vram='watch -n 0.1 nvidia-smi'
 
 # Custom download function with automatic filename for Hugging Face URLs
-download() {
+function download {
     local url=""
     # Find the first URL in the arguments
     for arg in "$@"; do
@@ -48,7 +48,7 @@ download() {
 }
 
 # Custom pip function for optimized installation
-pip() {
+function pip() {
     if [[ "$1" == "install" ]]; then
         echo "Using custom pip install with TMPDIR=/dev/shm/"
         TMPDIR=/dev/shm/ command pip install --no-cache-dir "${@:2}" && rm -rf /dev/shm/*
