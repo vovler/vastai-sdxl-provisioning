@@ -13,7 +13,39 @@ if ! grep -q "# --- Custom vast.ai configuration ---" ~/.bashrc; then
 
 # Custom Aliases
 alias vram='watch -n 0.1 nvidia-smi'
-alias download='aria2c -x 16 -s 16 -k 10M'
+
+# Custom download function with automatic filename for Hugging Face URLs
+download() {
+    local url=""
+    # Find the first URL in the arguments
+    for arg in "$@"; do
+        if [[ "$arg" =~ ^https?:// ]]; then
+            url="$arg"
+            break
+        fi
+    done
+
+    local user_agent="unknown/None; hf_hub/0.33.0.dev0; python/3.12.0"
+
+    # Check if --out is already specified
+    local out_present=0
+    for arg in "$@"; do
+        if [[ "$arg" == --out* ]]; then
+            out_present=1
+            break
+        fi
+    done
+
+    if [[ -n "$url" && "$url" == *"huggingface.co"* && $out_present -eq 0 ]]; then
+        local filename
+        filename=$(basename "$url")
+        filename="${filename%%\?*}"
+        echo "Auto-naming Hugging Face download to: $filename"
+        command aria2c -x 10 -s 10 -k 10M --lowest-speed-limit=1M -U "$user_agent" --out="$filename" "$@"
+    else
+        command aria2c -x 10 -s 10 -k 10M --lowest-speed-limit=1M -U "$user_agent" "$@"
+    fi
+}
 
 # Custom pip function for optimized installation
 pip() {
