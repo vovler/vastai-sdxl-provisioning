@@ -1,10 +1,7 @@
 #!/bin/bash
 
 # Colors
-RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
@@ -14,11 +11,14 @@ SHOW_CURSOR='\033[?25h'
 MOVE_TO_TOP='\033[H'
 CLEAR_SCREEN='\033[2J'
 
-LOG_FILE="/provisioning/logs.txt"
-
 # Global variables to track terminal dimensions
 PREV_TERMINAL_WIDTH=0
 PREV_TERMINAL_HEIGHT=0
+
+# Global variables for peak usage
+PEAK_GPU_PERCENT=0
+PEAK_VRAM_PERCENT=0
+PEAK_VRAM_USAGE_STR="N/A"
 
 # Function to create progress bar
 create_progress_bar() {
@@ -62,77 +62,6 @@ create_progress_bar() {
     printf "%s" "$bar"
 }
 
-# Function to convert scientific notation to integer
-scientific_to_int() {
-    local value="$1"
-    if [[ "$value" =~ ^[0-9]+$ ]]; then
-        echo "$value"
-    elif [[ "$value" =~ [eE] ]]; then
-        echo "$value" | awk '{printf "%.0f", $1}'
-    else
-        echo "0"
-    fi
-}
-
-# Function to check if running in container
-is_in_container() {
-    [ -f "/sys/fs/cgroup/memory/memory.limit_in_bytes" ] || [ -f "/sys/fs/cgroup/memory.max" ]
-}
-
-# Function to get container memory limit
-get_container_memory_limit() {
-    local limit="0"
-    
-    if [ -f "/sys/fs/cgroup/memory/memory.limit_in_bytes" ]; then
-        local raw_limit=$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes 2>/dev/null || echo "0")
-        limit=$(scientific_to_int "$raw_limit")
-        if [ "$limit" -gt 1000000000000000 ]; then
-            limit="0"
-        fi
-    elif [ -f "/sys/fs/cgroup/memory.max" ]; then
-        local max_val=$(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo "max")
-        if [ "$max_val" = "max" ]; then
-            limit="0"
-        else
-            limit=$(scientific_to_int "$max_val")
-        fi
-    fi
-    
-    echo "$limit"
-}
-
-# Function to get container memory usage
-get_container_memory_usage() {
-    local usage="0"
-    
-    if [ -f "/sys/fs/cgroup/memory/memory.usage_in_bytes" ]; then
-        local raw_usage=$(cat /sys/fs/cgroup/memory/memory.usage_in_bytes 2>/dev/null || echo "0")
-        usage=$(scientific_to_int "$raw_usage")
-    elif [ -f "/sys/fs/cgroup/memory.current" ]; then
-        local raw_usage=$(cat /sys/fs/cgroup/memory.current 2>/dev/null || echo "0")
-        usage=$(scientific_to_int "$raw_usage")
-    fi
-    
-    echo "$usage"
-}
-
-# Function to get memory stats
-get_memory_stats() {
-    if is_in_container; then
-        local limit=$(get_container_memory_limit)
-        local usage=$(get_container_memory_usage)
-        
-        if [ "$limit" -gt 0 ] && [ "$usage" -gt 0 ]; then
-            local percent=$((usage * 100 / limit))
-            echo "$usage $limit $percent container"
-            return
-        fi
-    fi
-    
-    local mem_info=$(free -b | awk 'NR==2{used=$3; total=$2; print used, total, int(used*100/total)}')
-    echo "$mem_info host"
-}
-
 # Function to convert bytes to GB
 bytes_to_gb() {
     local bytes=$1
@@ -141,17 +70,6 @@ bytes_to_gb() {
     else
         echo "$bytes" | awk '{printf "%.1f", $1/1024/1024/1024}'
     fi
-}
-
-# Function to get CPU usage
-get_cpu_usage() {
-    # Use a more reliable method
-    local cpu_usage=$(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | cut -d'%' -f1)
-    # Remove decimal part and ensure it's an integer
-    cpu_usage=${cpu_usage%.*}
-    cpu_usage=${cpu_usage:-0}
-    
-    echo "$cpu_usage"
 }
 
 # Function to create aligned metric line
@@ -207,17 +125,6 @@ get_stats() {
     
     # Get terminal dimensions (already updated by terminal_resized function)
     local terminal_width=$PREV_TERMINAL_WIDTH
-    local terminal_height=$PREV_TERMINAL_HEIGHT
-    
-    # Get CPU usage
-    local cpu_percent=$(get_cpu_usage)
-    
-    # Get memory stats
-    local mem_stats=$(get_memory_stats)
-    local mem_used=$(echo $mem_stats | cut -d' ' -f1)
-    local mem_total=$(echo $mem_stats | cut -d' ' -f2)
-    local mem_percent=$(echo $mem_stats | cut -d' ' -f3)
-    local mem_source=$(echo $mem_stats | cut -d' ' -f4)
     
     # Get disk stats
     local disk_stats=$(df -B1 / 2>/dev/null | awk 'NR==2{used=$3; total=$2; print used, total, int(used*100/total)}')
@@ -226,21 +133,15 @@ get_stats() {
     local disk_percent=$(echo $disk_stats | cut -d' ' -f3)
     
     # Ensure valid values
-    mem_used=${mem_used:-0}
-    mem_total=${mem_total:-0}
-    mem_percent=${mem_percent:-0}
     disk_used=${disk_used:-0}
     disk_total=${disk_total:-0}
     disk_percent=${disk_percent:-0}
     
     # Convert to GB
-    local mem_used_gb=$(bytes_to_gb "$mem_used")
-    local mem_total_gb=$(bytes_to_gb "$mem_total")
     local disk_used_gb=$(bytes_to_gb "$disk_used")
     local disk_total_gb=$(bytes_to_gb "$disk_total")
     
     # Format usage strings
-    local mem_usage_str="${mem_used_gb}/${mem_total_gb} GB"
     local disk_usage_str="${disk_used_gb}/${disk_total_gb} GB"
     
     # Calculate progress bar width
@@ -249,7 +150,6 @@ get_stats() {
     
     # GPU info
     local gpu_lines=""
-    local lines_used=6
     local has_gpu=false
     
     if command -v nvidia-smi >/dev/null 2>&1; then
@@ -283,55 +183,39 @@ get_stats() {
                     vram_percent=$((total_vram_used * 100 / total_vram_total))
                 fi
                 
+                # Update peak values
+                if [ "$gpu_percent" -gt "$PEAK_GPU_PERCENT" ]; then
+                    PEAK_GPU_PERCENT=$gpu_percent
+                fi
+                if [ "$vram_percent" -gt "$PEAK_VRAM_PERCENT" ]; then
+                    PEAK_VRAM_PERCENT=$vram_percent
+                    PEAK_VRAM_USAGE_STR="${total_vram_used}/${total_vram_total} MB"
+                fi
+                
                 local vram_usage_str="${total_vram_used}/${total_vram_total} MB"
-                gpu_lines="$(create_metric_line "GPU" "$gpu_percent" "" "$bar_width")\n"
-                gpu_lines+="$(create_metric_line "VRAM" "$vram_percent" "$vram_usage_str" "$bar_width")\n"
+                gpu_lines+="$(create_metric_line "GPU" "$gpu_percent" "" "$bar_width")\n"
+                gpu_lines+="$(create_metric_line "VRAM" "$vram_percent" "$vram_usage_str" "$bar_width")"
                 has_gpu=true
-                ((lines_used++))
             fi
         fi
     fi
     
     if [ "$has_gpu" = false ]; then
-        gpu_lines="${GREEN}GPU:  ${NC} No GPU detected\n"
-    fi
-    
-    # Environment indicator
-    local env_str=""
-    if [ "$mem_source" = "container" ]; then
-        env_str=" (Docker Container)"
-    fi
-    
-    # Calculate log lines
-    local log_lines=$((terminal_height - lines_used - 1))
-    if [ "$log_lines" -lt 1 ]; then log_lines=1; fi
-    
-    # Get logs
-    local log_content=""
-    if [ -f "$LOG_FILE" ]; then
-        while IFS= read -r line; do
-            if [[ $line == *"ERROR"* ]]; then
-                log_content+="${RED}$line${NC}\n"
-            elif [[ $line == *"WARNING"* ]]; then
-                log_content+="${YELLOW}$line${NC}\n"
-            else
-                log_content+="$line\n"
-            fi
-        done < <(tail -n "$log_lines" "$LOG_FILE" 2>/dev/null)
-        log_content="${log_content%\\n}"
-    else
-        log_content="${RED}Log file not found: $LOG_FILE${NC}"
+        gpu_lines="${GREEN}GPU:  ${NC} No GPU detected"
     fi
     
     # Build complete output buffer with aligned metrics
     local output=""
-    output+="${CYAN}=== SYSTEM MONITORING${env_str} ===${NC}\n"
-    output+="$(create_metric_line "CPU" "$cpu_percent" "" "$bar_width")\n"
-    output+="$(create_metric_line "RAM" "$mem_percent" "$mem_usage_str" "$bar_width")\n"
+    output+="${CYAN}=== SYSTEM MONITORING ===${NC}\n"
     output+="$(create_metric_line "DISK" "$disk_percent" "$disk_usage_str" "$bar_width")\n"
     output+="${gpu_lines}"
-    output+="${CYAN}=== LOGS ===${NC}\n"
-    output+="${log_content}"
+    
+    # Add peak usage section
+    output+="\n\n${CYAN}--- Peak Usage (press 'r' to reset) ---${NC}\n"
+    local peak_gpu_line=$(printf "%-11s %s%%" "GPU Peak:" "$PEAK_GPU_PERCENT")
+    local peak_vram_line=$(printf "%-11s %s%% (%s)" "VRAM Peak:" "$PEAK_VRAM_PERCENT" "$PEAK_VRAM_USAGE_STR")
+    output+="${GREEN}${peak_gpu_line}${NC}\n"
+    output+="${GREEN}${peak_vram_line}${NC}"
     
     # Choose display method based on whether terminal was resized
     if [ "$need_clear" = true ]; then
@@ -361,13 +245,6 @@ cleanup() {
 
 trap cleanup SIGINT SIGTERM EXIT
 
-# Check if log file exists
-if [ ! -f "$LOG_FILE" ]; then
-    echo -e "${YELLOW}Warning: Log file $LOG_FILE does not exist yet.${NC}"
-    echo "Starting monitoring anyway..."
-    sleep 2
-fi
-
 # Setup
 echo -e "${GREEN}Starting system monitoring... Press Ctrl+C to exit${NC}"
 sleep 1
@@ -375,6 +252,14 @@ setup_screen
 
 # Main monitoring loop
 while true; do
+    # Check for user input to reset peak values
+    read -s -n 1 -t 0.1 key
+    if [[ $key = "r" || $key = "R" ]]; then
+        PEAK_GPU_PERCENT=0
+        PEAK_VRAM_PERCENT=0
+        PEAK_VRAM_USAGE_STR="N/A"
+    fi
+
     get_stats
     sleep 0.5
 done

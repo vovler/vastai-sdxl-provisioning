@@ -58,7 +58,7 @@ fi
 
 
 # Global variables
-WORKSPACE="/workflow"
+WORKSPACE="/lab"
 PROVISIONING_DIR="/provisioning"
 LOG_FILE="$PROVISIONING_DIR/logs.txt"
 APP_SCRIPT="$WORKSPACE/init.py"
