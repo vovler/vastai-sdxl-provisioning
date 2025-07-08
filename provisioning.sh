@@ -35,38 +35,10 @@ export CUDA_DEVICE_ORDER=PCI_BUS_ID
 EOF
 fi
 
-# Set Conda environment path and activate if needed
-EXPECTED_CONDA_ENV_PATH="/venv/main"
-CONDA_BASE_PATH="/opt/conda" 
-
-# Check if we're already in the correct Conda environment
-if [ "$CONDA_PREFIX" != "$EXPECTED_CONDA_ENV_PATH" ]; then
-    echo "Not in correct Conda environment, activating $EXPECTED_CONDA_ENV_PATH..."
-
-    if [ ! -d "$EXPECTED_CONDA_ENV_PATH" ]; then
-        echo "Error: Conda environment not found at $EXPECTED_CONDA_ENV_PATH"
-        exit 1
-    fi
-    
-    if [ -f "$CONDA_BASE_PATH/etc/profile.d/conda.sh" ]; then
-        # shellcheck disable=SC1091
-        source "$CONDA_BASE_PATH/etc/profile.d/conda.sh"
-    else
-        echo "Error: conda.sh not found at $CONDA_BASE_PATH/etc/profile.d/conda.sh. Cannot activate environment."
-        exit 1
-    fi
-    
-    conda activate "$EXPECTED_CONDA_ENV_PATH"
-    
-    if [ "$CONDA_PREFIX" != "$EXPECTED_CONDA_ENV_PATH" ]; then
-        echo "Error: Failed to activate Conda environment. CONDA_PREFIX is '$CONDA_PREFIX'"
-        exit 1
-    fi
-    
-    echo "Conda environment activated: $CONDA_PREFIX"
-else
-    echo "Already in correct Conda environment: $CONDA_PREFIX"
-fi
+# Source .bashrc to set up the environment, including conda activation.
+# This is done to ensure that the following commands run in the correct environment.
+echo "Sourcing ~/.bashrc to set up environment..."
+source ~/.bashrc
 
 pip install --upgrade pip
 
@@ -90,4 +62,4 @@ cd /provisioning
 
 # Run startup.sh in a while loop in background, then exit
 #nohup bash -c 'while true; do ./startup.sh; sleep 1; done' > /dev/null 2>&1 &
-disown
+#disown
