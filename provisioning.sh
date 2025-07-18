@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # System setup: update, upgrade, and install packages
-apt-get update -y && apt-get upgrade -y
+apt-get update -y
 apt-get install -y aria2 libjemalloc-dev libjemalloc2
 
 # Append aliases, functions, and environment variables to .bashrc
