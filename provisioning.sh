@@ -2,7 +2,7 @@
 
 # System setup: update, upgrade, and install packages
 apt-get update -y
-apt-get install -y aria2 libjemalloc-dev libjemalloc2
+#apt-get install -y aria2 libjemalloc-dev libjemalloc2
 
 # Append aliases, functions, and environment variables to .bashrc
 # This ensures they are available in every new shell session.
@@ -58,9 +58,9 @@ function pip() {
 }
 
 # Environment variables for performance
-export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2:$LD_PRELOAD
-export PYTORCH_CUDA_ALLOC_CONF='expandable_segments:True'
-export CUDA_DEVICE_ORDER=PCI_BUS_ID
+#export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2:$LD_PRELOAD
+#export PYTORCH_CUDA_ALLOC_CONF='expandable_segments:True'
+#export CUDA_DEVICE_ORDER=PCI_BUS_ID
 
 # --- End of Custom vast.ai configuration ---
 
